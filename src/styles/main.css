@@ -1,0 +1,901 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * Copyright (C) 2026 Ben Richardson — https://benrichardson.dev
+ * See ADDITIONAL-TERMS.md for the section 7(b) attribution requirement.
+ *
+ * Deepshaft — the chrome around a full-bleed canvas. The play surface itself is painted by
+ * render.ts into a <canvas>; everything here is menu, lobby, HUD and overlay.
+ *
+ * Two rules in this file exist because of shipped bugs elsewhere in the fleet and must not be
+ * relaxed: `[hidden] { display: none !important; }` (Safari's UA rule is not !important, so a class
+ * that also sets `display` leaves an invisible blur layer eating every tap), and the short-viewport
+ * media queries LAST (an 812x375 landscape phone also matches a min-width tablet query).
+ */
+
+:root {
+  /* chrome */
+  --night: #0d1014;
+  --panel: #191f26;
+  --panel-hi: #232b34;
+  --edge: #3a4652;
+  --line: #2a323b;
+  --text: #e9eff5;
+  --dim: #9dabb9;
+  --amber: #ffb340;
+  --alarm: #ff6f57;
+  --good: #5fd08a;
+  --r: 10px;
+  --gap: 10px;
+  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* mobile.css keeps --vh accurate against the collapsing URL bar. */
+  --bg: #0d1014;
+}
+
+/* The `hidden` attribute must always win. See the file header. */
+[hidden] {
+  display: none !important;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--night);
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-content {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.site-footer {
+  flex-shrink: 0;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  text-align: center;
+  font-size: 13px;
+  color: var(--dim);
+}
+.site-footer a {
+  color: var(--dim);
+}
+body.playing .site-footer {
+  display: none !important;
+}
+
+a {
+  color: var(--amber);
+}
+
+/* ── buttons ───────────────────────────────────────────────────────────────── */
+.btn,
+.lobby-btn,
+.re-create,
+.re-join,
+.re-go,
+.re-back,
+.re-cancel,
+.re-browse,
+.re-make,
+.lobby-share,
+.lobby-start,
+.lobby-ready,
+.lobby-cancel,
+.lobby-host,
+.lobby-qr-toggle {
+  appearance: none;
+  border: 1px solid var(--edge);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  min-height: 48px;
+  padding: 12px 18px;
+  border-radius: var(--r);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.btn:hover,
+.lobby-btn:hover {
+  background: var(--panel-hi);
+}
+.btn.primary,
+.lobby-btn.primary,
+.re-create,
+.lobby-start {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: #1a1204;
+  font-weight: 700;
+}
+.btn[disabled],
+.lobby-btn[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+.btn.big {
+  min-height: 56px;
+  font-size: 17px;
+}
+.btn.ghost,
+.lobby-btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--dim);
+  font-weight: 500;
+}
+.btn.danger {
+  border-color: var(--alarm);
+  color: var(--alarm);
+}
+
+.iconbtn.wide {
+  min-width: 62px;
+  font-size: 14px;
+  font-weight: 650;
+}
+.iconbtn {
+  appearance: none;
+  border: 1px solid transparent;
+  background: rgba(13, 16, 20, 0.55);
+  color: var(--text);
+  font-size: 17px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 10px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.chip {
+  appearance: none;
+  border: 1px solid var(--edge);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 15px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.chip.on {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: #1a1204;
+  font-weight: 700;
+}
+
+/* ── screens / menu ────────────────────────────────────────────────────────── */
+.screen {
+  padding: 16px;
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.menu {
+  text-align: center;
+  padding-top: 22px;
+}
+.title {
+  font-size: clamp(34px, 11vw, 58px);
+  margin: 6px 0 2px;
+  letter-spacing: 0.01em;
+  font-weight: 800;
+}
+.tag {
+  color: var(--dim);
+  margin: 0 0 20px;
+  font-size: 16px;
+  line-height: 1.45;
+}
+.picker {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 12px 0 6px;
+}
+.picker.small .chip {
+  font-size: 14px;
+  min-height: 40px;
+  padding: 6px 12px;
+}
+.blurb {
+  color: var(--dim);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 6px auto 4px;
+  max-width: 46ch;
+}
+.menu-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 360px;
+  margin: 18px auto 0;
+  padding: 0 16px calc(8px + env(safe-area-inset-bottom));
+}
+.best {
+  color: var(--dim);
+  font-size: 14px;
+  margin-top: 14px;
+}
+.best b {
+  color: var(--amber);
+}
+
+/* ── overlays: sheets, pause, toast ────────────────────────────────────────── */
+.overlay,
+.pause-ov {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 7, 10, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 50;
+}
+.sheet,
+.pause-card {
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  padding: 20px;
+  max-width: 480px;
+  width: 100%;
+  max-height: 86dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sheet h2,
+.pause-card h2 {
+  margin: 0;
+  font-size: 21px;
+}
+.sheet h3 {
+  margin: 6px 0 0;
+  font-size: 16px;
+}
+.sheet p,
+.sheet li {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.sheet ul {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
+.sheet .fine,
+.pause-note {
+  font-size: 13px;
+  color: var(--dim);
+}
+.keycap {
+  font-family: var(--mono);
+  background: var(--panel-hi);
+  border: 1px solid var(--edge);
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-size: 13px;
+}
+.mode-rule {
+  border-left: 3px solid var(--amber);
+  padding-left: 10px;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translate(-50%, 12px);
+  background: var(--panel-hi);
+  border: 1px solid var(--edge);
+  padding: 10px 16px;
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity 160ms, transform 160ms;
+  z-index: 70;
+  pointer-events: none;
+}
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ── lobby + room entry (styling the engine's markup) ──────────────────────── */
+.lobby,
+.room-entry {
+  max-width: 440px;
+  margin: 0 auto;
+  display: grid;
+  gap: var(--gap);
+}
+.lobby-title,
+.re-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+.lobby-sub,
+.re-sub,
+.re-note,
+.lobby-wait,
+.lobby-spectating,
+.lobby-searching {
+  font-size: 13px;
+  color: var(--dim);
+  margin: 0;
+}
+.lobby-code,
+.re-room-code {
+  font-size: 30px;
+  letter-spacing: 0.18em;
+  font-weight: 800;
+  color: var(--amber);
+  font-family: var(--mono);
+}
+.lobby-invite,
+.lobby-actions,
+.re-go-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+}
+.lobby-link,
+.re-input {
+  flex: 1 1 180px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 12px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--edge);
+  border-radius: var(--r);
+  font: inherit;
+}
+.lobby-qr {
+  width: 100%;
+  max-width: 250px;
+  margin: 4px auto;
+}
+.lobby-players {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.lobby-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.lobby-player.is-self {
+  border-color: var(--amber);
+}
+.lobby-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--line);
+  flex: 0 0 auto;
+}
+/* The engine writes `lobby-dot ready`, not `ok`. A stylesheet that guesses `ok` leaves the ready
+   light dead forever, which reads as "my ready did not register". */
+.lobby-dot.ready {
+  background: var(--good);
+}
+.lobby-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lobby-badge {
+  margin-left: auto;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--amber);
+}
+.lobby-badge.ok {
+  color: var(--good);
+}
+.lobby-flash {
+  font-size: 13px;
+  color: var(--good);
+}
+.lobby-flash:empty {
+  display: none;
+}
+.lobby-searching,
+.lobby-wait {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--line);
+  border-top-color: var(--amber);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+.spinner.sm {
+  width: 13px;
+  height: 13px;
+  border-width: 2px;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.lobby-modes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.mode-blurb,
+.host-pick {
+  flex: 1 0 100%;
+  text-align: center;
+  color: var(--dim);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 4px 0 0;
+}
+
+/* ── countdown ─────────────────────────────────────────────────────────────── */
+.countdown {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(48px, 16vw, 96px);
+  font-weight: 800;
+  color: var(--amber);
+  text-shadow: 0 4px 26px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  z-index: 25;
+}
+.countdown.pop {
+  animation: pop 420ms ease-out;
+}
+@keyframes pop {
+  from {
+    transform: scale(0.55);
+    opacity: 0;
+  }
+}
+
+/* ── results ───────────────────────────────────────────────────────────────── */
+.results-screen {
+  padding-bottom: 4px;
+}
+.rhead {
+  font-size: 25px;
+  margin: 6px 0 2px;
+  text-align: center;
+}
+.rsub,
+.matchtally {
+  text-align: center;
+  color: var(--dim);
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+.matchtally {
+  color: var(--amber);
+  font-weight: 600;
+}
+.results {
+  display: grid;
+  gap: 10px;
+}
+.rrow {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--seat, var(--amber));
+  border-radius: var(--r);
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+.rrow.is-self {
+  border-color: var(--edge);
+  border-left-color: var(--seat, var(--amber));
+  background: var(--panel-hi);
+}
+.rname {
+  font-weight: 650;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.rname .rdown {
+  color: var(--alarm);
+  font-size: 12px;
+  font-weight: 500;
+}
+.rstats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+  color: var(--dim);
+}
+.rstats b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.rrun {
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+  display: grid;
+  gap: 4px;
+}
+.rrun .rbig {
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--amber);
+  line-height: 1.1;
+}
+.rcause {
+  color: var(--alarm);
+  font-size: 14px;
+}
+.waiting-note {
+  text-align: center;
+  color: var(--dim);
+  font-size: 14px;
+  margin: 0;
+  min-height: 18px;
+}
+
+/* ── the play surface ──────────────────────────────────────────────────────── */
+.game {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  background: #05070a;
+}
+.view {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  /* The raycaster renders at a reduced internal width and is stretched to fit; nearest-neighbour
+     keeps the columns crisp instead of smearing them into mush. */
+  image-rendering: pixelated;
+}
+
+/* HUD: top band and bottom band, both inset out of the notch and the home strip. */
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: calc(8px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right))
+    calc(8px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left));
+}
+.hud > * {
+  pointer-events: none;
+}
+.hud button {
+  pointer-events: auto;
+}
+.hud-top,
+.hud-bot {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+/* Every pill may shrink before the row may overflow. A HUD that pushes a control off a 375px
+   screen has hidden the one thing the player needed most. */
+.hud-top > *,
+.hud-bot > * {
+  min-width: 0;
+  flex-shrink: 1;
+}
+.hud-bot {
+  align-items: flex-end;
+}
+.hud-pill {
+  background: rgba(9, 12, 16, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9px;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.hud-pill.wide {
+  display: grid;
+  gap: 2px;
+}
+.hud-pill small {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--dim);
+  letter-spacing: 0.06em;
+}
+.hud-hp b {
+  color: var(--good);
+}
+.hud-hp.low b {
+  color: var(--alarm);
+}
+.hud-ammo b {
+  color: var(--amber);
+}
+.hud-depth b {
+  color: var(--text);
+}
+.hud-spacer {
+  flex: 1 1 auto;
+}
+.hud-keys {
+  display: flex;
+  gap: 5px;
+}
+.keytag {
+  width: 15px;
+  height: 15px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  opacity: 0.28;
+}
+.keytag.have {
+  opacity: 1;
+}
+.hud-msg {
+  align-self: center;
+  background: rgba(9, 12, 16, 0.8);
+  border-radius: 9px;
+  padding: 7px 13px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  max-width: 90%;
+}
+.hud-msg:empty {
+  display: none;
+}
+.hud-mates {
+  display: grid;
+  gap: 4px;
+  margin-left: auto;
+  text-align: right;
+}
+.matepill {
+  background: rgba(9, 12, 16, 0.72);
+  border-left: 3px solid var(--seat, var(--amber));
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.matepill.down {
+  color: var(--alarm);
+}
+
+/* ── the touch control layer ───────────────────────────────────────────────── */
+.control-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  touch-action: none;
+}
+/* Two halves: the left one spawns the floating movement stick, the right one is drag-to-look.
+   Neither draws anything, so neither occludes the view. */
+.stickzone,
+.lookzone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: auto;
+  touch-action: none;
+}
+.stickzone {
+  left: 0;
+  width: 46%;
+}
+.lookzone {
+  right: 0;
+  width: 54%;
+}
+.actionpad {
+  position: absolute;
+  right: calc(12px + env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+  pointer-events: none;
+  z-index: 34;
+}
+.actionpad > button {
+  pointer-events: auto;
+}
+.actbtn {
+  appearance: none;
+  min-width: 62px;
+  min-height: 62px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.34);
+  background: rgba(20, 26, 33, 0.62);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  display: grid;
+  place-items: center;
+  line-height: 1.15;
+  touch-action: none;
+}
+.actbtn.wide {
+  min-width: 74px;
+  border-radius: 34px;
+}
+.actbtn.on {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.actbtn[disabled] {
+  opacity: 0.3;
+}
+/* The gun-swap button carries the weapon's own colour so a glance is enough. */
+.actbtn .wname {
+  font-size: 11px;
+}
+.actbtn .wammo {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Desktop keeps mouse + keys, so the thumb zones and buttons are simply absent. */
+body.desktop .stickzone,
+body.desktop .lookzone,
+body.desktop .actionpad {
+  display: none;
+}
+
+/* Damage / pickup flashes are painted as a DOM veil rather than into the canvas, so they cost
+   nothing per frame and honour prefers-reduced-motion for free. */
+.veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 22;
+  opacity: 0;
+  transition: opacity 220ms ease-out;
+}
+.veil.hurt {
+  background: radial-gradient(ellipse at center, rgba(255, 40, 30, 0) 42%, rgba(255, 40, 30, 0.55) 100%);
+}
+.veil.show {
+  opacity: 1;
+  transition: opacity 60ms linear;
+}
+
+.pause-ov {
+  position: absolute;
+  z-index: 45;
+}
+
+/* ── wide / desktop ────────────────────────────────────────────────────────── */
+@media (min-width: 760px) {
+  .results {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .results .rrun {
+    grid-column: 1 / -1;
+  }
+  .hud-pill {
+    font-size: 14px;
+  }
+}
+
+/* The view is capped on a big screen: a raycaster stretched across 2560px is both ugly and a
+   pointless amount of fill. It stays centred, with the mine's own darkness either side. */
+@media (min-width: 1100px) {
+  .game {
+    display: grid;
+    place-items: center;
+  }
+  .view,
+  .hud,
+  .control-layer,
+  .veil {
+    max-width: 1100px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+  }
+}
+
+/* Short viewports LAST — an 812x375 landscape phone matches the tablet query above. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .menu {
+    padding-top: 6px;
+  }
+  .title {
+    font-size: 30px;
+  }
+  .tag {
+    margin-bottom: 12px;
+  }
+  .menu-actions {
+    margin-top: 10px;
+  }
+  .hud-pill {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+  .actbtn {
+    min-width: 54px;
+    min-height: 54px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

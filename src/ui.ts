@@ -1,0 +1,187 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ben Richardson — https://benrichardson.dev
+// See ADDITIONAL-TERMS.md for the section 7(b) attribution requirement.
+//
+// Deepshaft — every screen that is not the mine. Pure functions returning HTML; main.ts wires them.
+
+import { escapeHtml } from './dom';
+import type { Mode } from './modes';
+import { MODE_IDS, modeOf } from './modes';
+import { SEAT, SEAT_NAME } from './palette';
+import { ENEMIES, WEAPONS, WEAPON_ORDER } from './tuning';
+
+export const ATTRIB =
+  'Built by <a href="https://benrichardson.dev/" target="_blank" rel="noopener">benrichardson.dev</a> · ' +
+  '<a href="https://lab.benrichardson.dev" target="_blank" rel="noopener">more games, tools &amp; sites</a>';
+
+export function menuHtml(o: { modeId: string; best: number; muted: boolean; tierId: string }): string {
+  const mode = modeOf(o.modeId);
+  return `
+  <section class="screen menu">
+    <h1 class="title">Deepshaft</h1>
+    <p class="tag">A first-person descent into a mine that is closing behind you.</p>
+    <div class="picker" role="group" aria-label="Run shape">
+      ${MODE_IDS.map(
+        (id) =>
+          `<button class="chip${id === o.modeId ? ' on' : ''}" data-mode="${id}" aria-pressed="${id === o.modeId}">${escapeHtml(
+            modeOf(id).name,
+          )}</button>`,
+      ).join('')}
+    </div>
+    <p class="blurb">${escapeHtml(mode.blurb)}</p>
+    ${o.best > 0 ? `<p class="best">Deepest in ${escapeHtml(mode.name)}: <b>floor ${o.best}</b></p>` : ''}
+    <div class="menu-actions">
+      <button class="btn primary big" id="playSolo">Go down</button>
+      <button class="btn" id="playFriends">Play with friends</button>
+      <button class="btn" id="help">How to play</button>
+      <button class="btn ghost" id="about">About</button>
+      <button class="btn ghost" id="mute">${o.muted ? 'Sound off' : 'Sound on'}</button>
+    </div>
+  </section>`;
+}
+
+export function helpHtml(mode: Mode): string {
+  return `
+    <h2>How to play</h2>
+    <p><strong>You never aim.</strong> The gun engages whatever is awake in front of you, so where you
+    look is what you shoot — and what you walk past stays asleep.</p>
+    <p class="mode-rule">${escapeHtml(mode.name)}: ${escapeHtml(mode.rule)}</p>
+    <h3>On a phone</h3>
+    <ul>
+      <li>Put a thumb anywhere on the lower half: <strong>up and down walks</strong>, <strong>left and right turns</strong>.</li>
+      <li>A gentle push turns slowly for lining up a shot; a hard push spins you round.</li>
+      <li><strong>USE</strong> appears only when there is something to use — a door, the cage, a mate on the floor.</li>
+      <li>A second finger anywhere is an optional look-drag. You never need it.</li>
+    </ul>
+    <h3>On a keyboard</h3>
+    <ul>
+      <li><span class="keycap">W</span><span class="keycap">S</span> walk · <span class="keycap">A</span><span class="keycap">D</span> strafe ·
+      <span class="keycap">Q</span><span class="keycap">→</span> turn, or move the mouse</li>
+      <li><span class="keycap">E</span> use · <span class="keycap">Tab</span> or <span class="keycap">1</span>–<span class="keycap">3</span> weapon · <span class="keycap">Esc</span> pause</li>
+    </ul>
+    <h3>What is down there</h3>
+    <ul>
+      ${(Object.keys(ENEMIES) as Array<keyof typeof ENEMIES>)
+        .map((k) => `<li><strong>${escapeHtml(ENEMIES[k].name)}</strong> — ${escapeHtml(ENEMY_BLURB[k])}</li>`)
+        .join('')}
+      <li><strong>Firedamp</strong> — green gas. Shoot it and it goes off, and it does not care who is standing in it.</li>
+      <li><strong>Water</strong> — slows you and makes you loud, and a Hauler is too heavy to wade it.</li>
+      <li><strong>Grates</strong> — you can see and shoot straight through; nothing can walk through.</li>
+    </ul>
+    <h3>Your kit</h3>
+    <ul>
+      ${WEAPON_ORDER.map(
+        (w) => `<li><strong>${escapeHtml(WEAPONS[w].name)}</strong> — ${escapeHtml(WEAPON_BLURB[w])}</li>`,
+      ).join('')}
+    </ul>
+    <button class="btn sheet-close">Close</button>`;
+}
+
+const ENEMY_BLURB: Record<string, string> = {
+  thrall: 'slow, many, and it will walk into anything you are standing behind.',
+  lurker: 'spits from range and backs off the moment you close. Chase it or lose the room.',
+  stalker: 'fast, and it refuses to come at you from the front — it will go round.',
+  hauler: 'armoured, and the Cutter barely marks it. This is what the Lance is for.',
+};
+
+const WEAPON_BLURB: Record<string, string> = {
+  cutter: 'a rock drill. Fast, cheap, and nearly useless against armour.',
+  lance: 'one heavy round that punches through a line of bodies, and through armour.',
+  charge: 'a lobbed charge. The only thing that sets off firedamp on purpose — mind the blast.',
+};
+
+export function aboutHtml(): string {
+  return `
+    <h2>About Deepshaft</h2>
+    <p>A first-person crawl through a mine that is cut fresh from a seed every time you go down. Every
+    wall texture, every sound and every icon is generated by code as the page loads — there are no
+    images, no fonts and no samples to download.</p>
+    <p>The mine has no scripted moments. Everything interesting in it comes from a handful of rules
+    that do not know about each other: gas that anything can set off, water a Hauler cannot cross,
+    grates you can shoot through but nothing can walk through, and a locked door that quietly hands
+    the far half of the level a route to you the moment you open it.</p>
+    <h3>Playing with friends</h3>
+    <p>Rooms are <strong>peer-to-peer</strong>. Your browsers talk to each other directly over WebRTC;
+    no game state ever reaches a server, because there is no server. A public signalling relay is used
+    once, to introduce the two browsers, and then carries nothing.</p>
+    <h3>Privacy</h3>
+    <p>No cookies, no fingerprinting, no third-party fonts, nothing stored anywhere but your own
+    device. Page views are counted anonymously by Cloudflare Web Analytics, which sets no cookie.</p>
+    <p class="fine">${ATTRIB}</p>
+    <button class="btn sheet-close">Close</button>`;
+}
+
+export interface ResultRow {
+  seat: number;
+  name: string;
+  isSelf: boolean;
+  down: boolean;
+  kills: number;
+  damage: number;
+  doors: number;
+  revives: number;
+  steps: number;
+}
+
+export function resultsHtml(o: {
+  rows: ResultRow[];
+  mode: Mode;
+  deepest: number;
+  won: boolean;
+  seconds: number;
+  cause: string;
+  best: number;
+  runs: number;
+  multi: boolean;
+}): string {
+  const total = (k: keyof ResultRow): number => o.rows.reduce((s, r) => s + (r[k] as number), 0);
+  const bars: Array<[string, keyof ResultRow]> = [
+    ['Damage', 'damage'],
+    ['Doors', 'doors'],
+    ['Revives', 'revives'],
+    ['Ground', 'steps'],
+  ];
+  // Co-op leads with the SHARED outcome. The per-player strip below is a contribution breakdown in
+  // seat order — never sorted, never ranked, no places. A co-op summary that quietly becomes a
+  // leaderboard rewards hogging whatever it happens to count.
+  return `
+    <h2 class="rhead">${o.won ? 'You reached the bottom' : `${o.multi ? 'The crew' : 'You'} got to floor ${o.deepest}`}</h2>
+    <p class="rsub">${escapeHtml(o.mode.name)} · ${Math.floor(o.seconds / 60)}m ${Math.round(o.seconds % 60)}s${
+      o.best > 0 ? ` · best floor ${o.best}` : ''
+    }</p>
+    <div class="rrun">
+      <span class="rbig">${o.won ? 'CLEARED' : `FLOOR ${o.deepest}`}</span>
+      <span class="rcause">${escapeHtml(o.cause)}</span>
+      <span class="rsub">${total('kills')} killed · ${total('doors')} doors opened${
+        o.multi ? ` · ${total('revives')} pulled back up` : ''
+      }</span>
+    </div>
+    <div class="results">
+      ${o.rows
+        .map(
+          (r) => `<div class="rrow${r.isSelf ? ' is-self' : ''}" style="--seat:${SEAT[r.seat % SEAT.length]}">
+            <span class="rname">${escapeHtml(r.name)}${r.isSelf ? ' (you)' : ''}${
+              r.down ? '<span class="rdown">went down</span>' : ''
+            }</span>
+            <span class="rstats">${bars
+              .map(([label, key]) => {
+                const v = r[key] as number;
+                const t = total(key);
+                const pctv = t > 0 ? Math.round((v / t) * 100) : 0;
+                return `<span>${label} <b>${key === 'steps' ? `${Math.round(v)}m` : Math.round(v)}</b>${
+                  o.multi ? ` (${pctv}%)` : ''
+                }</span>`;
+              })
+              .join('')}<span>Kills <b>${r.kills}</b></span></span>
+          </div>`,
+        )
+        .join('')}
+    </div>`;
+}
+
+export const SEAT_LABEL = SEAT_NAME;
+
+/** Copy for the mid-round waiting states, so a spectator is never looking at a dead screen. */
+export function waitingHtml(round: number): string {
+  return `<div class="lobby-searching"><span class="spinner"></span> Floor ${round} is already underway — you are in the next run.</div>`;
+}
