@@ -146,9 +146,12 @@ describe('the HUD can never push a control off the screen', () => {
     for (const b of rows) expect(b).toMatch(/min-width:\s*0/);
   });
 
-  it('and so does every pill inside them', () => {
-    const kids = blocks(/\.hud-top > \*,\s*\.hud-bot > \*/);
-    expect(kids.length, 'the .hud-top > * / .hud-bot > * rule is missing — the row alone is not enough').toBe(1);
+  it('and so does every PILL inside them — but only the pills', () => {
+    // Originally `.hud-top > *, .hud-bot > *`, which was more specific than `.iconbtn` and therefore
+    // beat its 44px floor: the pause button rendered 28px wide with the floor still written down in
+    // the stylesheet. Naming the pills is what keeps text compressible and controls thumb-sized.
+    const kids = blocks(/\.hud-pill,\s*\.hud-keys,\s*\.hud-mates,\s*\.hud-msg/);
+    expect(kids.length, 'the pill shrink rule is missing — the row alone is not enough').toBe(1);
     expect(kids[0]).toMatch(/min-width:\s*0/);
     expect(kids[0]).toMatch(/flex-shrink:\s*1/);
   });
@@ -172,5 +175,24 @@ describe('nothing that sizes the play surface is a percentage', () => {
     for (const [name, value] of decls) {
       expect(`${name}: ${value}`, `${name} must not be sized as a percentage`).not.toMatch(/%/);
     }
+  });
+});
+
+describe('a thumb target never shrinks, however tight the row gets', () => {
+  it('.iconbtn declares flex-shrink: 0', () => {
+    // The HUD row lets its children compress so it can never overflow a 375px screen. Applied to the
+    // whole row that also squeezed the PAUSE button to 28px — a hit target well under the 44px floor,
+    // produced by the very fix that stopped the overflow. Text may compress; a control may not.
+    const block = /\.iconbtn\s*\{([^}]*)\}/.exec(css);
+    expect(block, 'no .iconbtn rule at all').not.toBeNull();
+    expect(block![1]).toMatch(/flex-shrink:\s*0/);
+    // And nothing more specific is allowed to zero its floor. `.hud-top > *` is (0,1,1) against
+    // `.iconbtn`'s (0,1,0), so a `min-width: 0` there wins and the 44px floor silently stops
+    // applying — which is exactly how the button ended up 28px wide with the floor still written down.
+    // Against the comment-stripped source: the explanation above mentions the old selector by name,
+    // and an assertion that a COMMENT satisfies is not an assertion.
+    expect(code, 'the shrink rule must name the pills, not every child of the row').not.toMatch(
+      /\.hud-(top|bot)\s*>\s*\*/,
+    );
   });
 });

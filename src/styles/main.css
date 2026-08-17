@@ -152,6 +152,11 @@ a {
 }
 .iconbtn {
   appearance: none;
+  /* A BUTTON never shrinks. The HUD row lets its children compress so it can never overflow a 375px
+     screen, and applied to the whole row that squeezed the pause control to 28px — a thumb target
+     well under the 44px floor, produced by the very fix that stopped the overflow. Text may
+     compress; a thing you have to hit may not. */
+  flex-shrink: 0;
   border: 1px solid transparent;
   background: rgba(13, 16, 20, 0.55);
   color: var(--text);
@@ -637,13 +642,18 @@ a {
   min-width: 0;
   flex-wrap: nowrap;
 }
-/* Every pill may shrink before the row may overflow. A HUD that pushes a control off a 375px
-   screen has hidden the one thing the player needed most. */
-.hud-top > *,
-.hud-bot > * {
+/* Every PILL may shrink before the row may overflow — a HUD that pushes a control off a 375px screen
+   has hidden the one thing the player needed most. Deliberately NOT `.hud-top > *`: that selector is
+   more specific than `.iconbtn`, so its `min-width: 0` beat the 44px floor and squeezed the pause
+   button to 28 wide. Text compresses; a thing you have to hit does not. */
+.hud-pill,
+.hud-keys,
+.hud-mates,
+.hud-msg {
   min-width: 0;
   flex-shrink: 1;
 }
+
 .hud-bot {
   align-items: flex-end;
 }

@@ -1064,6 +1064,29 @@ function boot(): void {
   seenTut: () => store.get<boolean>('seenTut', false),
   forgetTut: () => store.set('seenTut', false),
   bot: (seat: number) => new Bot(active!.game, seat, tierOf('miner'), {}, 1),
+  /**
+   * Hand the wheel to the SHIPPED bot for a while. The browser pass uses it to reach a real
+   * situation — a gallery with something in it — rather than a wall, because a synthetic "hold
+   * forward" drives into the first corner and grinds there, and a screenshot of a corner proves
+   * nothing about whether sprites draw.
+   */
+  autoplay(seconds: number): void {
+    const s = active;
+    if (!s) return;
+    const seat = s.game.mySeat ?? 0;
+    const b = new Bot(s.game, seat, tierOf('deputy'), {}, 7);
+    let floor = s.game.floor;
+    for (let i = 0; i < seconds * 60 && !s.game.over; i++) {
+      if (s.game.floor !== floor) {
+        floor = s.game.floor;
+        b.reset();
+      }
+      const intent = b.think(STEP);
+      activeControls?.setAng(intent.ang);
+      s.step(STEP, intent);
+      s.game.drainEvents();
+    }
+  },
 };
 
 boot();

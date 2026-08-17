@@ -50,8 +50,14 @@ const FOV = 0.85;
  * gallery floating in a black letterbox — which is exactly what the first build looked like. Scaling
  * the wall height by the aspect ratio narrows the VERTICAL field of view instead, which fills the
  * screen and reads as being in a tunnel rather than looking at a postcard of one.
+ *
+ * The CEILING on it is the second lesson, and it cost a round of screenshots to learn. At 0.78 the
+ * factor reached 1.7 on a phone, and a wall three cells away already filled the frame edge to edge:
+ * every screenshot of a normal corridor looked like a player pressed into a dead end, because there
+ * was no floor and no ceiling left to give the eye any depth. 0.6, capped at 1.45, fills the screen
+ * without eating the horizon.
  */
-const wallScale = (w: number, h: number): number => Math.max(1, Math.min(2.3, (h / w) * 0.78));
+const wallScale = (w: number, h: number): number => Math.max(1, Math.min(1.45, (h / w) * 0.6));
 const SHADES = 32;
 
 const packRgb = (r: number, g: number, b: number): number => ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
